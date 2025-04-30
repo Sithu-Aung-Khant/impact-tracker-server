@@ -7,4 +7,5 @@ router.get('/', distribution_controllers_1.getDistributions);
 router.get('/by-township', distribution_controllers_1.getDistributionSummaryByTownship);
 router.get('/by-aid-type', distribution_controllers_1.getDistributionsByAidType);
 router.get('/recent', distribution_controllers_1.getRecentDistributions);
+router.get('/total', distribution_controllers_1.getTotalDistributions);
 exports.default = router;

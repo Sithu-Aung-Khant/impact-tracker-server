@@ -9,8 +9,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRecentDistributions = exports.deleteDistribution = exports.updateDistribution = exports.createDistribution = exports.getDistributionById = exports.getDistributions = exports.getDistributionsByAidType = exports.getDistributionSummaryByTownship = void 0;
+exports.getTotalDistributions = exports.getRecentDistributions = exports.deleteDistribution = exports.updateDistribution = exports.createDistribution = exports.getDistributionById = exports.getDistributions = exports.getDistributionsByAidType = exports.getDistributionSummaryByTownship = void 0;
 const client_1 = require("../../generated/prisma/client");
+const date_fns_1 = require("date-fns");
 const prisma = new client_1.PrismaClient();
 const getDistributionSummaryByTownship = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -348,15 +349,15 @@ const getRecentDistributions = (req, res) => __awaiter(void 0, void 0, void 0, f
             },
         });
         const formattedDistributions = recentDistributions.map((distribution) => ({
-            Date: distribution.date.toLocaleDateString('en-US', {
+            date: distribution.date.toLocaleDateString('en-US', {
                 year: 'numeric',
                 month: 'short',
                 day: 'numeric',
             }),
-            Township: distribution.township.name,
-            'Aid Type': distribution.aidType.name,
-            Quantity: distribution.quantity,
-            'Field Worker': distribution.fieldWorker.name,
+            township: distribution.township.name,
+            aidType: distribution.aidType.name,
+            quantity: distribution.quantity,
+            fieldWorker: distribution.fieldWorker.name,
         }));
         res.json(formattedDistributions);
     }
@@ -366,3 +367,73 @@ const getRecentDistributions = (req, res) => __awaiter(void 0, void 0, void 0, f
     }
 });
 exports.getRecentDistributions = getRecentDistributions;
+const getTotalDistributions = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const currentMonthStart = (0, date_fns_1.startOfMonth)(new Date());
+        const currentMonthEnd = (0, date_fns_1.endOfMonth)(new Date());
+        const lastMonthStart = (0, date_fns_1.startOfMonth)((0, date_fns_1.subMonths)(new Date(), 1));
+        const lastMonthEnd = (0, date_fns_1.endOfMonth)((0, date_fns_1.subMonths)(new Date(), 1));
+        // Fetch current month distributions with aidType included
+        const currentMonthDistributions = yield prisma.distribution.findMany({
+            where: {
+                date: {
+                    gte: currentMonthStart,
+                    lte: currentMonthEnd,
+                },
+            },
+            include: {
+                aidType: true, // Include aidType relation
+            },
+        });
+        const totalDistributions = currentMonthDistributions.length;
+        const totalTownshipsReached = new Set(currentMonthDistributions.map((d) => d.townshipId)).size;
+        // Fetch last month distributions with aidType included
+        const lastMonthDistributions = yield prisma.distribution.findMany({
+            where: {
+                date: {
+                    gte: lastMonthStart,
+                    lte: lastMonthEnd,
+                },
+            },
+            include: {
+                aidType: true, // Include aidType relation
+            },
+        });
+        const lastMonthTotal = lastMonthDistributions.length;
+        // Calculate percentages
+        const percentageComparedToLastMonth = lastMonthTotal > 0
+            ? ((totalDistributions - lastMonthTotal) / lastMonthTotal) * 100
+            : 100; // If last month had no distributions, consider it a 100% increase
+        // Count food kits and education materials
+        const foodKitsCount = currentMonthDistributions.filter((d) => d.aidType.name === 'Food Kits').length;
+        const educationMaterialsCount = currentMonthDistributions.filter((d) => d.aidType.name === 'Education Materials').length;
+        const lastMonthFoodKitsCount = lastMonthDistributions.filter((d) => d.aidType.name === 'Food Kits').length;
+        const lastMonthEducationMaterialsCount = lastMonthDistributions.filter((d) => d.aidType.name === 'Education Materials').length;
+        const foodKitsPercentage = lastMonthFoodKitsCount > 0
+            ? ((foodKitsCount - lastMonthFoodKitsCount) / lastMonthFoodKitsCount) *
+                100
+            : 100;
+        const educationMaterialsPercentage = lastMonthEducationMaterialsCount > 0
+            ? ((educationMaterialsCount - lastMonthEducationMaterialsCount) /
+                lastMonthEducationMaterialsCount) *
+                100
+            : 100;
+        // Format the response
+        const response = {
+            totalDistributions,
+            percentageComparedToLastMonth,
+            totalTownshipsReached,
+            numberOfTownshipsThisMonth: totalTownshipsReached,
+            totalFoodKits: foodKitsCount,
+            foodKitsPercentage,
+            totalEducationMaterials: educationMaterialsCount,
+            educationMaterialsPercentage,
+        };
+        res.json(response);
+    }
+    catch (error) {
+        console.error('Error fetching total distributions:', error);
+        res.status(500).json({ error: 'Failed to fetch total distributions' });
+    }
+});
+exports.getTotalDistributions = getTotalDistributions;

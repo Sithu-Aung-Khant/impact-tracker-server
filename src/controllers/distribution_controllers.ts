@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma/client';
+import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 const prisma = new PrismaClient();
 
@@ -450,20 +451,116 @@ export const getRecentDistributions = async (
     });
 
     const formattedDistributions = recentDistributions.map((distribution) => ({
-      Date: distribution.date.toLocaleDateString('en-US', {
+      date: distribution.date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
       }),
-      Township: distribution.township.name,
-      'Aid Type': distribution.aidType.name,
-      Quantity: distribution.quantity,
-      'Field Worker': distribution.fieldWorker.name,
+      township: distribution.township.name,
+      aidType: distribution.aidType.name,
+      quantity: distribution.quantity,
+      fieldWorker: distribution.fieldWorker.name,
     }));
 
     res.json(formattedDistributions);
   } catch (error) {
     console.error('Error fetching recent distributions:', error);
     res.status(500).json({ error: 'Failed to fetch recent distributions' });
+  }
+};
+
+export const getTotalDistributions = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const currentMonthStart = startOfMonth(new Date());
+    const currentMonthEnd = endOfMonth(new Date());
+    const lastMonthStart = startOfMonth(subMonths(new Date(), 1));
+    const lastMonthEnd = endOfMonth(subMonths(new Date(), 1));
+
+    // Fetch current month distributions with aidType included
+    const currentMonthDistributions = await prisma.distribution.findMany({
+      where: {
+        date: {
+          gte: currentMonthStart,
+          lte: currentMonthEnd,
+        },
+      },
+      include: {
+        aidType: true, // Include aidType relation
+      },
+    });
+
+    const totalDistributions = currentMonthDistributions.length;
+    const totalTownshipsReached = new Set(
+      currentMonthDistributions.map((d) => d.townshipId)
+    ).size;
+
+    // Fetch last month distributions with aidType included
+    const lastMonthDistributions = await prisma.distribution.findMany({
+      where: {
+        date: {
+          gte: lastMonthStart,
+          lte: lastMonthEnd,
+        },
+      },
+      include: {
+        aidType: true, // Include aidType relation
+      },
+    });
+
+    const lastMonthTotal = lastMonthDistributions.length;
+
+    // Calculate percentages
+    const percentageComparedToLastMonth =
+      lastMonthTotal > 0
+        ? ((totalDistributions - lastMonthTotal) / lastMonthTotal) * 100
+        : 100; // If last month had no distributions, consider it a 100% increase
+
+    // Count food kits and education materials
+    const foodKitsCount = currentMonthDistributions.filter(
+      (d) => d.aidType.name === 'Food Kits'
+    ).length;
+    const educationMaterialsCount = currentMonthDistributions.filter(
+      (d) => d.aidType.name === 'Educational Materials'
+    ).length;
+
+    const lastMonthFoodKitsCount = lastMonthDistributions.filter(
+      (d) => d.aidType.name === 'Food Kits'
+    ).length;
+    const lastMonthEducationMaterialsCount = lastMonthDistributions.filter(
+      (d) => d.aidType.name === 'Educational Materials'
+    ).length;
+
+    const foodKitsPercentage =
+      lastMonthFoodKitsCount > 0
+        ? ((foodKitsCount - lastMonthFoodKitsCount) / lastMonthFoodKitsCount) *
+          100
+        : 100;
+
+    const educationMaterialsPercentage =
+      lastMonthEducationMaterialsCount > 0
+        ? ((educationMaterialsCount - lastMonthEducationMaterialsCount) /
+            lastMonthEducationMaterialsCount) *
+          100
+        : 100;
+
+    // Format the response
+    const response = {
+      totalDistributions,
+      percentageComparedToLastMonth,
+      totalTownshipsReached,
+      numberOfTownshipsThisMonth: totalTownshipsReached,
+      totalFoodKits: foodKitsCount,
+      foodKitsPercentage,
+      totalEducationMaterials: educationMaterialsCount,
+      educationMaterialsPercentage,
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Error fetching total distributions:', error);
+    res.status(500).json({ error: 'Failed to fetch total distributions' });
   }
 };
