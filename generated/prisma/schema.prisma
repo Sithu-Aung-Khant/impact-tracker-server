@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Township {
+  id            Int            @id @default(autoincrement())
+  name          String         @unique
+  region        String?
+  latitude      Float?
+  longitude     Float?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  distributions Distribution[]
+
+  @@index([name])
+}
+
+model AidType {
+  id            Int            @id @default(autoincrement())
+  name          String         @unique
+  description   String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  distributions Distribution[]
+
+  @@index([name])
+}
+
+model FieldWorker {
+  id            Int            @id @default(autoincrement())
+  name          String
+  email         String         @unique
+  phone         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  distributions Distribution[]
+
+  @@index([email])
+}
+
+model Distribution {
+  id            Int         @id @default(autoincrement())
+  date          DateTime
+  quantity      Int
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  townshipId    Int
+  aidTypeId     Int
+  fieldWorkerId Int
+  aidType       AidType     @relation(fields: [aidTypeId], references: [id])
+  fieldWorker   FieldWorker @relation(fields: [fieldWorkerId], references: [id])
+  township      Township    @relation(fields: [townshipId], references: [id])
+
+  @@index([date])
+  @@index([townshipId])
+  @@index([aidTypeId])
+}

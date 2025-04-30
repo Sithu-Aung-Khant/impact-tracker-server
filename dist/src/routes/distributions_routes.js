@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const distribution_controllers_1 = require("../controllers/distribution_controllers");
+const router = (0, express_1.Router)();
+router.get('/', distribution_controllers_1.getDistributions);
+router.get('/by-township', distribution_controllers_1.getDistributionSummaryByTownship);
+router.get('/by-aid-type', distribution_controllers_1.getDistributionsByAidType);
+router.get('/recent', distribution_controllers_1.getRecentDistributions);
+exports.default = router;
