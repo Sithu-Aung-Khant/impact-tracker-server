@@ -474,28 +474,27 @@ export const getTotalDistributions = async (
   res: Response
 ): Promise<void> => {
   try {
-    const currentMonthStart = startOfMonth(new Date());
-    const currentMonthEnd = endOfMonth(new Date());
     const lastMonthStart = startOfMonth(subMonths(new Date(), 1));
     const lastMonthEnd = endOfMonth(subMonths(new Date(), 1));
 
-    // Fetch current month distributions with aidType included
-    const currentMonthDistributions = await prisma.distribution.findMany({
-      where: {
-        date: {
-          gte: currentMonthStart,
-          lte: currentMonthEnd,
-        },
-      },
+    // Fetch all distributions with aidType included
+    const allDistributions = await prisma.distribution.findMany({
       include: {
-        aidType: true, // Include aidType relation
+        aidType: true,
       },
     });
 
-    const totalDistributions = currentMonthDistributions.length;
+    // Calculate total values from all distributions
+    const totalDistributions = allDistributions.length;
     const totalTownshipsReached = new Set(
-      currentMonthDistributions.map((d) => d.townshipId)
+      allDistributions.map((d) => d.townshipId)
     ).size;
+    const totalFoodKits = allDistributions
+      .filter((d) => d.aidType.name === 'Food Kits')
+      .reduce((sum, d) => sum + d.quantity, 0);
+    const totalEducationMaterials = allDistributions
+      .filter((d) => d.aidType.name === 'Educational Materials')
+      .reduce((sum, d) => sum + d.quantity, 0);
 
     // Fetch last month distributions with aidType included
     const lastMonthDistributions = await prisma.distribution.findMany({
@@ -506,42 +505,33 @@ export const getTotalDistributions = async (
         },
       },
       include: {
-        aidType: true, // Include aidType relation
+        aidType: true,
       },
     });
 
     const lastMonthTotal = lastMonthDistributions.length;
+    const lastMonthFoodKitsCount = lastMonthDistributions
+      .filter((d) => d.aidType.name === 'Food Kits')
+      .reduce((sum, d) => sum + d.quantity, 0);
+    const lastMonthEducationMaterialsCount = lastMonthDistributions
+      .filter((d) => d.aidType.name === 'Educational Materials')
+      .reduce((sum, d) => sum + d.quantity, 0);
 
-    // Calculate percentages
+    // Calculate percentages compared to last month
     const percentageComparedToLastMonth =
       lastMonthTotal > 0
         ? ((totalDistributions - lastMonthTotal) / lastMonthTotal) * 100
-        : 100; // If last month had no distributions, consider it a 100% increase
-
-    // Count food kits and education materials
-    const foodKitsCount = currentMonthDistributions.filter(
-      (d) => d.aidType.name === 'Food Kits'
-    ).length;
-    const educationMaterialsCount = currentMonthDistributions.filter(
-      (d) => d.aidType.name === 'Educational Materials'
-    ).length;
-
-    const lastMonthFoodKitsCount = lastMonthDistributions.filter(
-      (d) => d.aidType.name === 'Food Kits'
-    ).length;
-    const lastMonthEducationMaterialsCount = lastMonthDistributions.filter(
-      (d) => d.aidType.name === 'Educational Materials'
-    ).length;
+        : 100;
 
     const foodKitsPercentage =
       lastMonthFoodKitsCount > 0
-        ? ((foodKitsCount - lastMonthFoodKitsCount) / lastMonthFoodKitsCount) *
+        ? ((totalFoodKits - lastMonthFoodKitsCount) / lastMonthFoodKitsCount) *
           100
         : 100;
 
     const educationMaterialsPercentage =
       lastMonthEducationMaterialsCount > 0
-        ? ((educationMaterialsCount - lastMonthEducationMaterialsCount) /
+        ? ((totalEducationMaterials - lastMonthEducationMaterialsCount) /
             lastMonthEducationMaterialsCount) *
           100
         : 100;
@@ -552,9 +542,10 @@ export const getTotalDistributions = async (
       percentageComparedToLastMonth,
       totalTownshipsReached,
       numberOfTownshipsThisMonth: totalTownshipsReached,
-      totalFoodKits: foodKitsCount,
+
+      totalFoodKits,
       foodKitsPercentage,
-      totalEducationMaterials: educationMaterialsCount,
+      totalEducationMaterials,
       educationMaterialsPercentage,
     };
 
