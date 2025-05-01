@@ -8,4 +8,5 @@ router.get('/by-township', distribution_controllers_1.getDistributionSummaryByTo
 router.get('/by-aid-type', distribution_controllers_1.getDistributionsByAidType);
 router.get('/recent', distribution_controllers_1.getRecentDistributions);
 router.get('/total', distribution_controllers_1.getTotalDistributions);
+router.post('/', distribution_controllers_1.createDistribution);
 exports.default = router;

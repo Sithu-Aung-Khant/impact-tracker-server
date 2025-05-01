@@ -34,6 +34,7 @@ const getDistributionSummaryByTownship = (req, res) => __awaiter(void 0, void 0,
                 .replace(/\s+/g, '')
                 .replace(/^./, (firstChar) => firstChar.toLowerCase());
             const quantity = distribution.quantity;
+            const distributionDate = distribution.date;
             if (!acc[townshipName]) {
                 // Initialize the summary object with all aid types
                 acc[townshipName] = aidTypeNames.reduce((obj, name) => {
@@ -41,12 +42,17 @@ const getDistributionSummaryByTownship = (req, res) => __awaiter(void 0, void 0,
                     return obj;
                 }, {});
                 acc[townshipName].total = 0;
+                acc[townshipName].lastDistributionDate = distributionDate;
             }
             acc[townshipName][aidTypeName] += quantity;
             acc[townshipName].total += quantity;
+            // Update last distribution date if the current date is more recent
+            if (distributionDate > acc[townshipName].lastDistributionDate) {
+                acc[townshipName].lastDistributionDate = distributionDate;
+            }
             return acc;
         }, {});
-        const formattedSummary = Object.entries(summary).map(([township, data]) => (Object.assign({ township }, data)));
+        const formattedSummary = Object.entries(summary).map(([township, data]) => (Object.assign(Object.assign({ township }, data), { lastDistributionDate: data.lastDistributionDate })));
         res.json(formattedSummary);
     }
     catch (error) {
@@ -369,24 +375,23 @@ const getRecentDistributions = (req, res) => __awaiter(void 0, void 0, void 0, f
 exports.getRecentDistributions = getRecentDistributions;
 const getTotalDistributions = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const currentMonthStart = (0, date_fns_1.startOfMonth)(new Date());
-        const currentMonthEnd = (0, date_fns_1.endOfMonth)(new Date());
         const lastMonthStart = (0, date_fns_1.startOfMonth)((0, date_fns_1.subMonths)(new Date(), 1));
         const lastMonthEnd = (0, date_fns_1.endOfMonth)((0, date_fns_1.subMonths)(new Date(), 1));
-        // Fetch current month distributions with aidType included
-        const currentMonthDistributions = yield prisma.distribution.findMany({
-            where: {
-                date: {
-                    gte: currentMonthStart,
-                    lte: currentMonthEnd,
-                },
-            },
+        // Fetch all distributions with aidType included
+        const allDistributions = yield prisma.distribution.findMany({
             include: {
-                aidType: true, // Include aidType relation
+                aidType: true,
             },
         });
-        const totalDistributions = currentMonthDistributions.length;
-        const totalTownshipsReached = new Set(currentMonthDistributions.map((d) => d.townshipId)).size;
+        // Calculate total values from all distributions
+        const totalDistributions = allDistributions.length;
+        const totalTownshipsReached = new Set(allDistributions.map((d) => d.townshipId)).size;
+        const totalFoodKits = allDistributions
+            .filter((d) => d.aidType.name === 'Food Kits')
+            .reduce((sum, d) => sum + d.quantity, 0);
+        const totalEducationMaterials = allDistributions
+            .filter((d) => d.aidType.name === 'Educational Materials')
+            .reduce((sum, d) => sum + d.quantity, 0);
         // Fetch last month distributions with aidType included
         const lastMonthDistributions = yield prisma.distribution.findMany({
             where: {
@@ -396,25 +401,26 @@ const getTotalDistributions = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 },
             },
             include: {
-                aidType: true, // Include aidType relation
+                aidType: true,
             },
         });
         const lastMonthTotal = lastMonthDistributions.length;
-        // Calculate percentages
+        const lastMonthFoodKitsCount = lastMonthDistributions
+            .filter((d) => d.aidType.name === 'Food Kits')
+            .reduce((sum, d) => sum + d.quantity, 0);
+        const lastMonthEducationMaterialsCount = lastMonthDistributions
+            .filter((d) => d.aidType.name === 'Educational Materials')
+            .reduce((sum, d) => sum + d.quantity, 0);
+        // Calculate percentages compared to last month
         const percentageComparedToLastMonth = lastMonthTotal > 0
             ? ((totalDistributions - lastMonthTotal) / lastMonthTotal) * 100
-            : 100; // If last month had no distributions, consider it a 100% increase
-        // Count food kits and education materials
-        const foodKitsCount = currentMonthDistributions.filter((d) => d.aidType.name === 'Food Kits').length;
-        const educationMaterialsCount = currentMonthDistributions.filter((d) => d.aidType.name === 'Education Materials').length;
-        const lastMonthFoodKitsCount = lastMonthDistributions.filter((d) => d.aidType.name === 'Food Kits').length;
-        const lastMonthEducationMaterialsCount = lastMonthDistributions.filter((d) => d.aidType.name === 'Education Materials').length;
+            : 100;
         const foodKitsPercentage = lastMonthFoodKitsCount > 0
-            ? ((foodKitsCount - lastMonthFoodKitsCount) / lastMonthFoodKitsCount) *
+            ? ((totalFoodKits - lastMonthFoodKitsCount) / lastMonthFoodKitsCount) *
                 100
             : 100;
         const educationMaterialsPercentage = lastMonthEducationMaterialsCount > 0
-            ? ((educationMaterialsCount - lastMonthEducationMaterialsCount) /
+            ? ((totalEducationMaterials - lastMonthEducationMaterialsCount) /
                 lastMonthEducationMaterialsCount) *
                 100
             : 100;
@@ -424,9 +430,9 @@ const getTotalDistributions = (req, res) => __awaiter(void 0, void 0, void 0, fu
             percentageComparedToLastMonth,
             totalTownshipsReached,
             numberOfTownshipsThisMonth: totalTownshipsReached,
-            totalFoodKits: foodKitsCount,
+            totalFoodKits,
             foodKitsPercentage,
-            totalEducationMaterials: educationMaterialsCount,
+            totalEducationMaterials,
             educationMaterialsPercentage,
         };
         res.json(response);
