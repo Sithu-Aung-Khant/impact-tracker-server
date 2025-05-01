@@ -36,6 +36,7 @@ export const getDistributionSummaryByTownship = async (
         .replace(/\s+/g, '')
         .replace(/^./, (firstChar) => firstChar.toLowerCase());
       const quantity = distribution.quantity;
+      const distributionDate = distribution.date;
 
       if (!acc[townshipName]) {
         // Initialize the summary object with all aid types
@@ -44,18 +45,25 @@ export const getDistributionSummaryByTownship = async (
           return obj;
         }, {} as Record<string, number>);
         acc[townshipName].total = 0;
+        acc[townshipName].lastDistributionDate = distributionDate;
       }
 
-      acc[townshipName][aidTypeName] += quantity;
-      acc[townshipName].total += quantity;
+      (acc[townshipName] as Record<string, number>)[aidTypeName] += quantity;
+      (acc[townshipName] as { total: number }).total += quantity;
+
+      // Update last distribution date if the current date is more recent
+      if (distributionDate > acc[townshipName].lastDistributionDate) {
+        acc[townshipName].lastDistributionDate = distributionDate;
+      }
 
       return acc;
-    }, {} as Record<string, Record<string, number>>);
+    }, {} as Record<string, Record<string, number | Date>>);
 
     const formattedSummary = Object.entries(summary).map(
       ([township, data]) => ({
         township,
         ...data,
+        lastDistributionDate: data.lastDistributionDate,
       })
     );
 

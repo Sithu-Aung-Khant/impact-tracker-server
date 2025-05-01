@@ -5,6 +5,7 @@ import {
   getRecentDistributions,
   getDistributionsByAidType,
   getTotalDistributions,
+  createDistribution,
 } from '../controllers/distribution_controllers';
 
 const router = Router();
@@ -14,5 +15,5 @@ router.get('/by-township', getDistributionSummaryByTownship);
 router.get('/by-aid-type', getDistributionsByAidType);
 router.get('/recent', getRecentDistributions);
 router.get('/total', getTotalDistributions);
-
+router.post('/', createDistribution);
 export default router;
